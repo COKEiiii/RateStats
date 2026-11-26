@@ -1,0 +1,14 @@
+{
+  "enabled": false,
+  "smtp_host": "",
+  "smtp_port": 465,
+  "tls": "ssl",
+  "smtp_user": "",
+  "smtp_password": "",
+  "from_email": "",
+  "to_emails": "",
+  "cc_emails": "",
+  "delivery_mode": "single",
+  "subject_template": "市场利率结果 {date}",
+  "body_template": "您好，\n\n请查收市场利率结果。"
+}

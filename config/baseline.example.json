@@ -1,0 +1,7 @@
+{
+  "report": "inputs/baseline-report.xlsx",
+  "rainbow": "inputs/baseline-rainbow.xlsx",
+  "historical_date": "2026-10-08",
+  "approved": false,
+  "sources": []
+}

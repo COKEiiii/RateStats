@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llm-auto"
+version = "0.2.0"
+description = "Local text-LLM bank rate collection and two-workbook adaptation"
+requires-python = ">=3.11"
+dependencies = ["openpyxl>=3.1,<4", "playwright>=1.50,<2", "PyMuPDF>=1.24,<2", "certifi>=2024.2.2", "xlwings>=0.33,<0.35; sys_platform == 'darwin'", "appscript>=1.1; sys_platform == 'darwin'", "psutil>=5.9; sys_platform == 'darwin'", "lxml>=5; sys_platform == 'darwin'"]
+
+[project.scripts]
+market-rate = "market_rates.cli:main"
+market-rate-format = "market_rates.report_format:main"
+market-rate-rainbow-format = "market_rates.rainbow_format:main"
+
+[tool.setuptools.packages.find]
+include = ["market_rates*", "scripts*"]
+
+[tool.setuptools.package-data]
+market_rates = ["*.html"]

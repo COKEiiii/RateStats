@@ -1,0 +1,5 @@
+{
+  "binary": "",
+  "model_directory": "",
+  "note": "空值使用已运行的本机Ollama或PATH中的安装；模型权重独立安装。"
+}

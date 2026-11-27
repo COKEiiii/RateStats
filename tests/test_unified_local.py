@@ -1,6 +1,8 @@
+import json
 import os,sys,unittest
 from copy import deepcopy
-from subprocess import CompletedProcess
+from io import StringIO
+from subprocess import CalledProcessError, CompletedProcess
 from types import SimpleNamespace
 from datetime import date
 from pathlib import Path
@@ -91,6 +93,25 @@ class UnifiedLocalTests(unittest.TestCase):
                         with project_lock():pass
                     raise ValueError('stop')
             with project_lock():pass
+    @unittest.skipUnless(os.name == 'posix', 'POSIX local runner')
+    def test_busy_resume_reports_active_log_without_marking_batch_failed(self):
+        with TemporaryDirectory() as temp:
+            root = Path(temp).resolve()
+            work = root / 'runs/all-active'
+            state = dict(self.state(), project=str(root), status='running')
+            save(work / 'workflow.json', state)
+            save(root / 'outputs/latest-all-run.json', dict(workflow=str(work), status='running'))
+            log = work / '01新元促销.log'
+            log.write_text('Excel is working\n')
+            with (patch.object(run_all, 'ROOT', root), patch.object(run_all.os, 'chdir'),
+                  patch('market_rates.runtime.ensure_configuration'), patch('sys.stderr', new_callable=StringIO) as stderr):
+                with project_lock():
+                    self.assertEqual(run_all.main(['--resume', str(work), '--resume-only']), 1)
+                self.assertIn('已有全量任务正在运行', stderr.getvalue())
+                self.assertIn(str(log), stderr.getvalue())
+            self.assertFalse((root / 'data/全量启动失败.log').exists())
+            self.assertEqual(run_all.load(work / 'workflow.json'), state)
+
     def test_picker_searches_launch_time_and_uses_existing_resume_policy(self):
         with TemporaryDirectory() as temp:
             root=Path(temp).resolve()
@@ -111,19 +132,35 @@ class UnifiedLocalTests(unittest.TestCase):
             self.assertEqual(picker_action(by_name['all-rebuilt'],root,today=today)[0],'继续此批次')
             self.assertEqual(picker_action(by_name['all-finished'],root,today=today)[0],'查看交付')
 
-    def test_resume_launcher_dispatches_selected_directory_or_cancels(self):
-        work=run_macos.ROOT/'runs/all-selected'
-        with (patch.object(sys,'argv',['run_macos','resume']),
-              patch('scripts.resume_gui.choose_workflow',return_value=work) as choose,
-              patch.object(run_macos.subprocess,'run',return_value=CompletedProcess([],7)) as spawn):
-            self.assertEqual(run_macos.main(),7)
-            choose.assert_called_once_with(run_macos.ROOT)
-            self.assertEqual(spawn.call_args.args[0],
-                             [sys.executable,'-m','scripts.run_all','--resume',str(work),'--resume-only','--mail-gui'])
+    def test_resume_launcher_waits_for_picker_exit_then_runs_in_terminal(self):
+        work = run_macos.ROOT / 'runs/all-选定批次'
+        picker = [sys.executable, '-m', 'scripts.resume_gui']
+        runner = [sys.executable, '-m', 'scripts.run_all', '--resume', str(work), '--resume-only', '--mail-gui']
+        env = {'EXAMPLE': 'test'}
+        with (patch.object(sys, 'argv', ['run_macos', 'resume']),
+              patch.object(run_macos, 'prepare_environment', return_value=env),
+              patch.object(run_macos.subprocess, 'run', side_effect=[
+                  CompletedProcess(picker, 0, json.dumps(str(work))), CompletedProcess(runner, 7),
+              ]) as spawn):
+            self.assertEqual(run_macos.main(), 7)
+        first, second = spawn.call_args_list
+        self.assertEqual(first.args, (picker,))
+        self.assertEqual(first.kwargs, dict(cwd=run_macos.ROOT, env=env,
+                                           stdout=run_macos.subprocess.PIPE, encoding='utf-8', check=True))
+        self.assertEqual(second.args, (runner,))
+        self.assertEqual(second.kwargs, dict(cwd=run_macos.ROOT, env=env))
+
+    def test_resume_launcher_skips_workflow_when_picker_cancels_or_fails(self):
+        picker = [sys.executable, '-m', 'scripts.resume_gui']
+        with (patch.object(sys, 'argv', ['run_macos', 'resume']),
+              patch.object(run_macos.subprocess, 'run', return_value=CompletedProcess(picker, 0, 'null')) as spawn):
+            self.assertEqual(run_macos.main(), 0)
+            self.assertEqual(spawn.call_count, 1)
             spawn.reset_mock()
-            choose.return_value=None
-            self.assertEqual(run_macos.main(),0)
-            spawn.assert_not_called()
+            spawn.side_effect = CalledProcessError(2, picker)
+            with self.assertRaises(CalledProcessError):
+                run_macos.main()
+            self.assertEqual(spawn.call_count, 1)
 
     def test_resume_only_does_not_start_fresh_if_batch_became_ineligible(self):
         with TemporaryDirectory() as temp:

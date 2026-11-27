@@ -54,8 +54,10 @@ def configuration(bank,links=str(bank_links())):
         cfg['products'][0]['name']='Maybank SGD Standalone Time Deposit Promotion'
         cfg['link_registry']=bank_link(links,'maybank','SGD','促销',['www.maybank2u.com.sg'])
         cfg['official_section_url']=cfg['link_registry']['url']
-        cfg['scope_note']='User 2026-10-01 selected section ii Standalone Time Deposit; exclude Deposits Bundle Promotion.'
-        section=dict(start=r'^ii\.\s*Standalone[^\n]*$',end=r'^How to place deposit$',
+        cfg['scope_note']='User 2026-10-01 selected Standalone Time Deposit; exclude bundle and other promotions.'
+        # The product title stays the same when new campaigns change the section number.
+        section=dict(start=r'^(?:[ivxlcdm]+\.\s*)?Standalone Time Deposit and Term Deposit-i\s*\(at branches and online\)$',
+            end=r'^How to place deposit$',
             context=r'^Singapore Dollar Time Deposit\s*/\s*Term Deposit-i\s*/\s*iSAVvy Time Deposit Promotion$',
             table_headers=['Tenure','Promotional Rates'],include_context_in_image=False)
         source('standalone',cfg['official_section_url'],[dict(**unit('body'),section_between=section)])

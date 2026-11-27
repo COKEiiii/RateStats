@@ -24,13 +24,35 @@ def start_model(work,env=None):
     except Exception as exc:
         raise RuntimeError('本机模型启动失败，详情：'+str(log_path)) from exc
 
+class ProjectBusy(RuntimeError):
+    """Another process holds the full-workflow lock."""
+
+
+def recent_running_log():
+    try:
+        latest = load(ROOT / 'outputs/latest-all-run.json')
+        if latest['status'] != 'running':
+            return None
+        work = Path(latest['workflow']).resolve()
+        if work.parent != (ROOT / 'runs').resolve():
+            return None
+        state = load(work / 'workflow.json')
+        if state['project'] != str(ROOT) or state['status'] != 'running':
+            return None
+        logs = (path for path in work.glob('*.log') if path.is_file())
+        return max(logs, key=lambda path: path.stat().st_mtime_ns, default=None)
+    except (KeyError, OSError, RuntimeError, TypeError, ValueError):
+        return None
+
+
 @contextlib.contextmanager
 def project_lock():
     path=ROOT/'data/unified-run.lock';path.parent.mkdir(exist_ok=True)
     with path.open('a+b') as f:
         import fcntl
         try:fcntl.flock(f.fileno(),fcntl.LOCK_EX|fcntl.LOCK_NB)
-        except OSError:raise RuntimeError('已有全量任务正在运行，请使用已有窗口查看进度。')
+        except BlockingIOError as exc:
+            raise ProjectBusy('已有全量任务正在运行。请等待当前进程退出后再续跑。') from exc
         try:yield
         finally:fcntl.flock(f.fileno(),fcntl.LOCK_UN)
 
@@ -262,6 +284,11 @@ def main(argv=None):
         parser.error('--resume-only 必须与 --resume 一起使用')
     try:
         run(args)
+    except ProjectBusy as exc:
+        print(exc, file=sys.stderr, flush=True)
+        if log := recent_running_log():
+            print('最近批次日志：' + str(log), file=sys.stderr, flush=True)
+        return 1
     except WorkflowFailure as exc:
         print(format_summary(exc.stage,exc.details,exc.log,exc.work),file=sys.stderr,flush=True)
         return 1

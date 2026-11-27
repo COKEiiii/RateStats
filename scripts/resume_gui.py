@@ -1,5 +1,6 @@
 """Choose a saved all-workflow batch for the macOS resume launcher."""
 
+import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -179,3 +180,8 @@ def choose_workflow(project_root):
         return chosen
     finally:
         root.destroy()
+
+
+if __name__ == '__main__':
+    work = choose_workflow(Path.cwd())
+    print(json.dumps(str(work) if work is not None else None))
